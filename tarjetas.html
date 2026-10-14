@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tarjetas del Nacimiento Frallier</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Alegreya:wght@500;700&family=Alegreya+Sans:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="figuras.js"></script>
+<style>
+  :root {
+    --fondo: #E9EAF0; --papel: #FFFFFF; --noche: #1C2140; --paja: #E8B94A;
+    --texto: #1C2140; --suave: #5B6180; --campo: #FFFFFF; --borde: #C9CBD8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --fondo: #12152B; --texto: #E9EAF0; --suave: #A7ABC4; --campo: #1C2140; --borde: #3A3F66; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--fondo); color: var(--texto); font-family: "Alegreya Sans", "Segoe UI", system-ui, sans-serif; }
+
+  .controles { max-width: 760px; margin: 0 auto; padding: 28px 20px 8px; }
+  .controles h1 { font-family: "Alegreya", Georgia, serif; font-size: 2rem; margin: 0 0 6px; }
+  .controles p { margin: 0 0 14px; line-height: 1.5; color: var(--suave); max-width: 64ch; }
+  .fila { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+  label { display: block; font-weight: 500; margin-bottom: 4px; }
+  input { width: min(520px, 100%); padding: 10px 12px; font: inherit; border: 1px solid var(--borde); border-radius: 8px; background: var(--campo); color: var(--texto); }
+  button { padding: 10px 16px; font: inherit; font-weight: 500; border: 0; border-radius: 8px; cursor: pointer; background: var(--noche); color: #fff; }
+  button.sec { background: var(--paja); color: var(--noche); }
+  @media (prefers-color-scheme: dark) { button { background: var(--paja); color: #1C2140; } button.sec { background: #E9EAF0; } }
+  input:focus-visible, button:focus-visible { outline: 3px solid var(--paja); outline-offset: 2px; }
+  .nota { font-size: .92rem; margin-top: 10px; }
+
+  /* Tarjetas: 9 x 12.4 cm, 4 por hoja carta */
+  .hoja { display: grid; grid-template-columns: repeat(auto-fill, 9cm); gap: 0.6cm; justify-content: center; padding: 20px; }
+  .tarjeta {
+    width: 9cm; height: 12.4cm; background: var(--papel); color: #1C2140;
+    border: 1px dashed #B9BCCB; border-radius: 4mm; overflow: hidden;
+    display: grid; grid-template-rows: auto 1fr auto; break-inside: avoid;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .cab { background: #1C2140; color: #fff; padding: 3mm 5mm; display: flex; align-items: center; gap: 3mm; }
+  .cab svg { width: 6mm; height: 6mm; flex: none; }
+  .cab h2 { font-family: "Alegreya", Georgia, serif; font-size: 15pt; margin: 0; line-height: 1.15; }
+  .marcador { display: grid; place-items: center; padding: 4mm 0; }
+  .marcador svg { width: 6cm; height: 6cm; display: block; }
+  .pie { display: grid; grid-template-columns: 2.6cm 1fr; gap: 3.5mm; padding: 0 5mm 4.5mm; align-items: center; }
+  .qr { width: 2.6cm; height: 2.6cm; }
+  .qr img, .qr canvas { width: 100% !important; height: 100% !important; image-rendering: pixelated; }
+  .pie p { margin: 0; font-size: 9.5pt; line-height: 1.35; }
+  .pie .ref { color: #5B6180; font-size: 8.5pt; margin-top: 1.5mm; }
+  .pie .uso { font-size: 8pt; color: #5B6180; margin-top: 1.5mm; }
+
+  @page { size: letter; margin: 1cm; }
+  @media print {
+    body { background: #fff; }
+    .controles { display: none; }
+    .hoja { padding: 0; gap: 0.5cm; grid-template-columns: repeat(2, 9cm); }
+  }
+</style>
+</head>
+<body>
+
+<section class="controles">
+  <h1>Tarjetas del Nacimiento</h1>
+  <p>Escribe la dirección donde publicaste el visor (la página index.html, con https://). Los códigos QR se generan con esa dirección. Imprime al 100 % de escala, sin "ajustar a la página".</p>
+  <div class="fila">
+    <div>
+      <label for="url">Dirección del visor</label>
+      <input id="url" type="url" placeholder="https://tu-servidor/nacimiento/">
+    </div>
+    <button id="actualizar" type="button">Actualizar códigos QR</button>
+    <button id="imprimir" class="sec" type="button">Imprimir tarjetas</button>
+  </div>
+  <p class="nota" id="nota"></p>
+</section>
+
+<main class="hoja" id="hoja"></main>
+
+<script>
+const estrella = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#E8B94A" d="M12 1.5l2.6 7.1 7.4.3-5.8 4.7 2 7.3L12 16.7 5.8 20.9l2-7.3L2 8.9l7.4-.3z"/></svg>';
+const hoja = document.getElementById("hoja");
+const input = document.getElementById("url");
+const nota = document.getElementById("nota");
+
+// Dirección por defecto: la carpeta donde está publicada esta misma página.
+function urlPorDefecto() {
+  if (location.protocol === "https:" || location.protocol === "http:") return location.href.replace(/tarjetas\.html.*$/, "");
+  return "";
+}
+try { input.value = localStorage.getItem("nacimiento-url") || urlPorDefecto(); } catch (e) { input.value = urlPorDefecto(); }
+
+window.FIGURAS.forEach(f => {
+  const t = document.createElement("article");
+  t.className = "tarjeta";
+  t.innerHTML = `
+    <div class="cab">${estrella}<h2>${f.nombre}</h2></div>
+    <div class="marcador">${window.marcadorSVG(f.bits)}</div>
+    <div class="pie">
+      <div class="qr" id="qr-${f.id}"></div>
+      <div>
+        <p>${f.texto}</p>
+        <p class="ref">${f.ref}</p>
+        <p class="uso">Escanea el QR y apunta la cámara al cuadro negro.</p>
+      </div>
+    </div>`;
+  hoja.appendChild(t);
+});
+
+function generarQR() {
+  let base = input.value.trim();
+  if (!base) { nota.textContent = "Escribe la dirección del visor para generar los códigos QR."; return; }
+  if (!/^https:\/\//i.test(base)) nota.textContent = "Ojo: la dirección debe empezar con https:// o la cámara no abrirá en el celular.";
+  else nota.textContent = "Códigos QR listos. Prueba cada tarjeta con tu celular antes de imprimir todas.";
+  if (!/\/$/.test(base) && !/\.html$/i.test(base)) base += "/";
+  try { localStorage.setItem("nacimiento-url", input.value.trim()); } catch (e) {}
+  window.FIGURAS.forEach(f => {
+    const caja = document.getElementById("qr-" + f.id);
+    caja.innerHTML = "";
+    const destino = base + (base.includes("?") ? "&" : "?") + "fig=" + f.id;
+    new QRCode(caja, { text: destino, width: 256, height: 256, correctLevel: QRCode.CorrectLevel.M });
+  });
+}
+document.getElementById("actualizar").addEventListener("click", generarQR);
+document.getElementById("imprimir").addEventListener("click", () => window.print());
+generarQR();
+</script>
+</body>
+</html>

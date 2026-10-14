@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Nacimiento Frallier · Realidad aumentada</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Alegreya:wght@500;700&family=Alegreya+Sans:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/aframe@1.3.0/dist/aframe-v1.3.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar.js"></script>
+<script src="figuras.js"></script>
+<style>
+  :root {
+    --noche: #1C2140;
+    --paja: #E8B94A;
+    --lino: #FFFDF7;
+    --tinta: #1C2140;
+    --suave: #5B6180;
+  }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+  body { font-family: "Alegreya Sans", "Segoe UI", system-ui, sans-serif; }
+
+  .barra {
+    position: fixed; z-index: 10; left: 0; right: 0; top: 0;
+    padding: calc(env(safe-area-inset-top, 0px) + 10px) 16px 10px;
+    background: linear-gradient(to bottom, rgba(28,33,64,.85), rgba(28,33,64,0));
+    color: var(--lino); display: flex; align-items: center; gap: 10px;
+    pointer-events: none;
+  }
+  .barra svg { width: 26px; height: 26px; flex: none; }
+  .barra h1 { font-family: "Alegreya", Georgia, serif; font-weight: 700; font-size: 1.15rem; margin: 0; letter-spacing: .01em; }
+
+  .panel {
+    position: fixed; z-index: 10; left: 12px; right: 12px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+    max-width: 460px; margin: 0 auto;
+    background: var(--lino); color: var(--tinta);
+    border-radius: 14px; padding: 14px 18px;
+    border-left: 6px solid var(--paja);
+    box-shadow: 0 6px 24px rgba(0,0,0,.35);
+    transition: transform .35s ease;
+  }
+  .panel h2 { font-family: "Alegreya", Georgia, serif; font-size: 1.35rem; margin: 0 0 2px; line-height: 1.2; }
+  .panel p { margin: 0; line-height: 1.45; font-size: 1rem; }
+  .panel .ref { color: var(--suave); font-size: .9rem; margin-top: 4px; }
+  .panel.aviso { border-left-color: #C0392B; }
+
+  @media (prefers-reduced-motion: reduce) { .panel { transition: none; } }
+</style>
+</head>
+<body>
+
+<div class="barra">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#E8B94A" d="M12 1.5l2.6 7.1 7.4.3-5.8 4.7 2 7.3L12 16.7 5.8 20.9l2-7.3L2 8.9l7.4-.3z"/></svg>
+  <h1>Nacimiento Frallier</h1>
+</div>
+
+<div class="panel" id="panel" role="status" aria-live="polite">
+  <h2 id="p-titulo">Apunta a una tarjeta</h2>
+  <p id="p-texto">Enfoca el cuadro negro de cualquier tarjeta del nacimiento y la figura aparecerá encima.</p>
+  <p class="ref" id="p-ref"></p>
+</div>
+
+<a-scene embedded
+  vr-mode-ui="enabled: false"
+  loading-screen="enabled: false"
+  renderer="logarithmicDepthBuffer: true; precision: medium; antialias: true;"
+  arjs="sourceType: webcam; detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false; sourceWidth: 1280; sourceHeight: 960; displayWidth: 1280; displayHeight: 960;">
+
+  <a-entity light="type: ambient; color: #FFF6E5; intensity: 0.75"></a-entity>
+  <a-entity light="type: directional; color: #FFFFFF; intensity: 0.7" position="1 3 2"></a-entity>
+
+  <!-- Los marcadores (1 a 13) se crean aquí desde figuras.js -->
+  <a-entity id="marcadores"></a-entity>
+
+  <a-entity camera></a-entity>
+</a-scene>
+
+<script>
+// ---------- Utilidades para construir figuras con primitivas de A-Frame ----------
+function el(padre, tag, attrs) {
+  const e = document.createElement(tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  padre.appendChild(e);
+  return e;
+}
+function grupo(padre, attrs) { return el(padre, "a-entity", attrs || {}); }
+
+const C = {
+  piel: "#E9B98F", pielMorena: "#8A5A3C", oro: "#E8B94A", madera: "#7A4E2D",
+  paja: "#D9B45A", blanco: "#F4F1EA", negro: "#222222"
+};
+const brillo = (color, int) => `color: ${color}; emissive: ${color}; emissiveIntensity: ${int || 0.5}`;
+
+// Persona genérica: túnica cónica, cabeza, brazos y accesorios opcionales.
+function persona(p, o) {
+  const g = grupo(p, { position: o.pos || "0 0 0", rotation: o.rot || "0 0 0" });
+  el(g, "a-cone", { "radius-bottom": 0.36, "radius-top": 0.14, height: 1.0, position: "0 0.5 0", color: o.tunica });
+  el(g, "a-sphere", { radius: 0.17, position: "0 1.0 0", scale: "1.3 0.7 1", color: o.tunica });
+  if (o.manto) el(g, "a-cone", { "radius-bottom": 0.4, "radius-top": 0.16, height: 0.85, position: "0 0.58 -0.05", color: o.manto, "open-ended": true, side: "double" });
+  // Brazos hacia el frente
+  [-1, 1].forEach(s => {
+    el(g, "a-cylinder", { radius: 0.055, height: 0.42, position: `${0.2 * s} 0.86 0.1`, rotation: `-55 0 ${-12 * s}`, color: o.tunica });
+    el(g, "a-sphere", { radius: 0.05, position: `${0.13 * s} 0.76 0.27`, color: o.piel || C.piel });
+  });
+  // Cabeza y ojos
+  el(g, "a-sphere", { radius: 0.14, position: "0 1.22 0.01", color: o.piel || C.piel });
+  [-1, 1].forEach(s => el(g, "a-sphere", { radius: 0.016, position: `${0.045 * s} 1.24 0.135`, color: C.negro }));
+  if (o.barba) el(g, "a-sphere", { radius: 0.1, position: "0 1.13 0.07", scale: "1 1.1 0.7", color: o.barba });
+  if (o.cabello) el(g, "a-sphere", { radius: 0.15, position: "0 1.26 -0.03", color: o.cabello });
+  if (o.velo) {
+    el(g, "a-sphere", { radius: 0.17, position: "0 1.24 -0.04", color: o.velo });
+    el(g, "a-cone", { "radius-bottom": 0.24, "radius-top": 0.13, height: 0.4, position: "0 1.03 -0.08", color: o.velo });
+  }
+  if (o.corona) {
+    el(g, "a-cylinder", { radius: 0.13, height: 0.08, position: "0 1.36 0", material: brillo(C.oro, 0.3) });
+    for (let i = 0; i < 5; i++) {
+      const a = i * 72 * Math.PI / 180;
+      el(g, "a-cone", { "radius-bottom": 0.03, "radius-top": 0, height: 0.09, position: `${0.12 * Math.sin(a)} 1.44 ${0.12 * Math.cos(a)}`, material: brillo(C.oro, 0.3) });
+    }
+  }
+  if (o.aureola) el(g, "a-torus", { radius: 0.16, "radius-tubular": 0.014, position: "0 1.43 0", rotation: "90 0 0", material: brillo(C.oro, 0.8) });
+  if (o.baston) {
+    el(g, "a-cylinder", { radius: 0.025, height: 1.5, position: "0.42 0.75 0.08", color: C.madera });
+    if (o.gancho) el(g, "a-torus", { radius: 0.08, "radius-tubular": 0.025, arc: 200, position: "0.5 1.5 0.08", rotation: "0 0 -10", color: C.madera });
+  }
+  if (o.regalo === "cofre") {
+    el(g, "a-box", { width: 0.2, height: 0.14, depth: 0.14, position: "0 0.78 0.3", material: brillo(C.oro, 0.35) });
+    el(g, "a-box", { width: 0.22, height: 0.04, depth: 0.16, position: "0 0.87 0.3", color: "#9C6B1E" });
+  }
+  if (o.regalo === "incensario") {
+    el(g, "a-sphere", { radius: 0.1, position: "0 0.8 0.3", material: brillo("#C9A227", 0.3) });
+    el(g, "a-cone", { "radius-bottom": 0.06, "radius-top": 0, height: 0.12, position: "0 0.94 0.3", material: brillo("#C9A227", 0.3) });
+    el(g, "a-sphere", { radius: 0.05, position: "0 1.05 0.3", color: "#DDDDDD", opacity: 0.6, animation: "property: position; to: 0 1.3 0.3; dur: 2200; loop: true; easing: easeOutQuad", "animation__f": "property: material.opacity; from: 0.6; to: 0; dur: 2200; loop: true" });
+  }
+  if (o.regalo === "jarra") {
+    el(g, "a-cylinder", { radius: 0.07, height: 0.2, position: "0 0.82 0.3", color: "#6B3FA0" });
+    el(g, "a-cone", { "radius-bottom": 0.07, "radius-top": 0.03, height: 0.08, position: "0 0.96 0.3", color: "#6B3FA0" });
+    el(g, "a-sphere", { radius: 0.03, position: "0 1.02 0.3", material: brillo(C.oro, 0.4) });
+  }
+  return g;
+}
+
+// ---------- Figuras ----------
+const CONSTRUIR = {
+  1: p => { // Niño Jesús en el pesebre
+    const g = grupo(p);
+    [-0.32, 0.32].forEach(x => {
+      el(g, "a-box", { width: 0.06, height: 0.6, depth: 0.06, position: `${x} 0.28 0`, rotation: "0 0 0 ", color: C.madera });
+      el(g, "a-box", { width: 0.06, height: 0.55, depth: 0.06, position: `${x} 0.26 0`, rotation: "35 0 0", color: C.madera });
+      el(g, "a-box", { width: 0.06, height: 0.55, depth: 0.06, position: `${x} 0.26 0`, rotation: "-35 0 0", color: C.madera });
+    });
+    el(g, "a-box", { width: 0.8, height: 0.2, depth: 0.42, position: "0 0.5 0", color: C.madera });
+    el(g, "a-box", { width: 0.74, height: 0.08, depth: 0.36, position: "0 0.6 0", color: C.paja });
+    for (let i = 0; i < 9; i++) el(g, "a-box", { width: 0.25, height: 0.012, depth: 0.012, position: `${-0.36 + i * 0.09} 0.63 ${0.17 - (i % 3) * 0.17}`, rotation: `0 ${i * 37} ${10 - i * 3}`, color: "#C9A040" });
+    el(g, "a-cylinder", { radius: 0.1, height: 0.36, position: "-0.04 0.71 0", rotation: "0 0 90", color: C.blanco });
+    el(g, "a-sphere", { radius: 0.09, position: "0.2 0.73 0", color: C.piel });
+    el(g, "a-torus", { radius: 0.12, "radius-tubular": 0.012, position: "0.27 0.76 0", rotation: "0 90 0", material: brillo(C.oro, 0.9) });
+    el(g, "a-entity", { light: "type: point; color: #FFD27A; intensity: 0.6; distance: 2", position: "0 1 0.3" });
+  },
+  2: p => persona(p, { tunica: "#E8DCC8", manto: "#2E5AA8", velo: "#2E5AA8", rot: "0 15 0" }),
+  3: p => persona(p, { tunica: "#8B5E3C", manto: "#C08A3E", barba: "#4A3020", cabello: "#4A3020", baston: true, rot: "0 -15 0" }),
+  4: p => { // Ángel flotante con alas
+    const g = grupo(p, { animation: "property: position; from: 0 0.15 0; to: 0 0.3 0; dir: alternate; dur: 1800; loop: true; easing: easeInOutSine" });
+    persona(g, { tunica: "#FFFFFF", cabello: "#E2C27A", aureola: true });
+    [-1, 1].forEach(s => el(g, "a-sphere", {
+      radius: 0.5, position: `${0.24 * s} 1.0 -0.2`, scale: "0.16 0.75 0.45", rotation: `0 0 ${-25 * s}`, color: "#F7F3FF",
+      animation: `property: rotation; from: 0 0 ${-25 * s}; to: 0 ${-20 * s} ${-35 * s}; dir: alternate; dur: 700; loop: true; easing: easeInOutSine`
+    }));
+  },
+  5: p => { // Estrella de Belén girando
+    const g = grupo(p, { position: "0 1.0 0", animation: "property: rotation; to: 0 360 0; dur: 7000; loop: true; easing: linear" });
+    el(g, "a-sphere", { radius: 0.15, material: brillo("#FFD95A", 0.9) });
+    for (let i = 0; i < 5; i++) {
+      const a = i * 72;
+      const r = a * Math.PI / 180;
+      el(g, "a-cone", { "radius-bottom": 0.11, "radius-top": 0, height: 0.42, position: `${0.3 * Math.sin(r)} ${0.3 * Math.cos(r)} 0`, rotation: `0 0 ${-a}`, material: brillo("#FFD95A", 0.8) });
+    }
+    for (let i = 1; i <= 6; i++) el(p, "a-sphere", { radius: 0.07 - i * 0.008, position: `${-0.25 - i * 0.15} ${1.0 - i * 0.12} -0.1`, material: brillo("#FFE9A8", 0.9), opacity: 1 - i * 0.13 });
+    el(p, "a-entity", { light: "type: point; color: #FFE08A; intensity: 0.8; distance: 3", position: "0 1 0.2" });
+  },
+  6: p => persona(p, { tunica: "#6B7B3A", manto: "#A88B5C", barba: "#3D2B1F", cabello: "#3D2B1F", baston: true, gancho: true }),
+  7: p => { // Oveja
+    const g = grupo(p, { rotation: "0 -30 0" });
+    [[0, 0.45, 0], [0.15, 0.5, 0.08], [-0.15, 0.48, 0.06], [0.1, 0.5, -0.1], [-0.12, 0.47, -0.09], [0, 0.6, 0]].forEach(([x, y, z]) =>
+      el(g, "a-sphere", { radius: 0.17, position: `${x} ${y} ${z}`, color: "#F5F2EA" }));
+    el(g, "a-sphere", { radius: 0.11, position: "0.34 0.58 0", scale: "1.2 1 0.9", color: C.negro });
+    [-1, 1].forEach(s => el(g, "a-sphere", { radius: 0.05, position: `0.3 0.64 ${0.1 * s}`, scale: "0.5 0.4 1.3", color: C.negro }));
+    [[0.15, 0.1], [0.15, -0.1], [-0.15, 0.1], [-0.15, -0.1]].forEach(([x, z]) =>
+      el(g, "a-cylinder", { radius: 0.035, height: 0.32, position: `${x} 0.16 ${z}`, color: C.negro }));
+  },
+  8: p => { // Buey
+    const g = grupo(p, { rotation: "0 -30 0" });
+    el(g, "a-box", { width: 0.9, height: 0.45, depth: 0.42, position: "0 0.58 0", color: "#8B5A2B" });
+    el(g, "a-box", { width: 0.3, height: 0.3, depth: 0.3, position: "0.56 0.72 0", color: "#7A4C22" });
+    el(g, "a-box", { width: 0.14, height: 0.16, depth: 0.26, position: "0.74 0.66 0", color: "#D9B79A" });
+    [-1, 1].forEach(s => el(g, "a-cone", { "radius-bottom": 0.035, "radius-top": 0.005, height: 0.22, position: `0.56 0.92 ${0.18 * s}`, rotation: `${60 * s} 0 0`, color: "#F0E6D2" }));
+    [[0.32, 0.15], [0.32, -0.15], [-0.32, 0.15], [-0.32, -0.15]].forEach(([x, z]) =>
+      el(g, "a-cylinder", { radius: 0.06, height: 0.38, position: `${x} 0.19 ${z}`, color: "#6E4420" }));
+    el(g, "a-cylinder", { radius: 0.015, height: 0.4, position: "-0.47 0.5 0", rotation: "0 0 -20", color: "#6E4420" });
+  },
+  9: p => { // Burro
+    const g = grupo(p, { rotation: "0 -30 0" });
+    el(g, "a-box", { width: 0.8, height: 0.4, depth: 0.36, position: "0 0.62 0", color: "#8E8E8E" });
+    el(g, "a-box", { width: 0.16, height: 0.4, depth: 0.16, position: "0.42 0.85 0", rotation: "0 0 -30", color: "#8E8E8E" });
+    el(g, "a-box", { width: 0.36, height: 0.18, depth: 0.18, position: "0.62 1.0 0", rotation: "0 0 -20", color: "#8E8E8E" });
+    el(g, "a-box", { width: 0.12, height: 0.14, depth: 0.19, position: "0.8 0.94 0", rotation: "0 0 -20", color: "#D8D3CB" });
+    [-1, 1].forEach(s => el(g, "a-cone", { "radius-bottom": 0.04, "radius-top": 0.01, height: 0.28, position: `0.52 1.2 ${0.06 * s}`, rotation: `${12 * s} 0 15`, color: "#7A7A7A" }));
+    el(g, "a-box", { width: 0.05, height: 0.36, depth: 0.04, position: "0.36 0.97 0", rotation: "0 0 -30", color: "#3A3A3A" });
+    [[0.3, 0.12], [0.3, -0.12], [-0.3, 0.12], [-0.3, -0.12]].forEach(([x, z]) =>
+      el(g, "a-cylinder", { radius: 0.045, height: 0.44, position: `${x} 0.22 ${z}`, color: "#7A7A7A" }));
+  },
+  10: p => persona(p, { tunica: "#7B2D8B", manto: "#C9A227", barba: "#E8E4DA", corona: true, regalo: "cofre" }),
+  11: p => persona(p, { tunica: "#A3282E", manto: "#2E6B4F", barba: "#8A5A2B", corona: true, regalo: "incensario" }),
+  12: p => persona(p, { tunica: "#2E6B4F", manto: "#A3282E", piel: C.pielMorena, barba: "#2A1C14", corona: true, regalo: "jarra" }),
+  13: p => { // Portal de Belén completo, a escala reducida
+    const g = grupo(p, { scale: "0.55 0.55 0.55" });
+    [[-1.1, -0.6], [1.1, -0.6], [-1.1, 0.5], [1.1, 0.5]].forEach(([x, z]) =>
+      el(g, "a-cylinder", { radius: 0.06, height: 1.9, position: `${x} 0.95 ${z}`, color: C.madera }));
+    el(g, "a-box", { width: 1.4, height: 0.06, depth: 1.4, position: "-0.55 2.1 -0.05", rotation: "0 0 22", color: "#A47A4A" });
+    el(g, "a-box", { width: 1.4, height: 0.06, depth: 1.4, position: "0.55 2.1 -0.05", rotation: "0 0 -22", color: "#A47A4A" });
+    el(g, "a-plane", { width: 2.2, height: 1.9, position: "0 0.95 -0.62", color: "#5C4330", side: "double" });
+    el(g, "a-plane", { width: 2.4, height: 1.3, position: "0 0.01 0", rotation: "-90 0 0", color: C.paja });
+    const ubicar = (id, pos, esc, rot) => { const h = grupo(g, { position: pos, scale: `${esc} ${esc} ${esc}`, rotation: rot || "0 0 0" }); CONSTRUIR[id](h); };
+    ubicar(1, "0 0 0.15", 0.6);
+    ubicar(2, "-0.6 0 0.1", 0.75, "0 25 0");
+    ubicar(3, "0.6 0 0.1", 0.75, "0 -25 0");
+    ubicar(8, "-0.65 0 -0.4", 0.55);
+    ubicar(9, "0.35 0 -0.4", 0.55, "0 180 0");
+    ubicar(5, "0 1.5 0", 0.6);
+  }
+};
+
+// ---------- Crear marcadores y conectar eventos ----------
+const params = new URLSearchParams(location.search);
+const panel = document.getElementById("panel");
+const pT = document.getElementById("p-titulo"), pX = document.getElementById("p-texto"), pR = document.getElementById("p-ref");
+const porId = Object.fromEntries(window.FIGURAS.map(f => [f.id, f]));
+
+function mostrar(t, x, r, aviso) {
+  pT.textContent = t; pX.textContent = x; pR.textContent = r || "";
+  panel.classList.toggle("aviso", !!aviso);
+}
+function inicial() {
+  const f = porId[parseInt(params.get("fig"), 10)];
+  if (f) mostrar(`Busca la tarjeta de ${f.nombre}`, "Enfoca el cuadro negro de la tarjeta y mantén el celular estable.", "");
+  else mostrar("Apunta a una tarjeta", "Enfoca el cuadro negro de cualquier tarjeta del nacimiento y la figura aparecerá encima.", "");
+}
+
+if (!window.isSecureContext) {
+  mostrar("Falta HTTPS", "El navegador solo permite usar la cámara en páginas https://. Publica esta carpeta en un servidor con HTTPS.", "", true);
+} else {
+  inicial();
+}
+window.addEventListener("camera-error", () =>
+  mostrar("No se pudo abrir la cámara", "Revisa que el navegador tenga permiso de cámara para esta página y recárgala.", "", true));
+
+const cont = document.getElementById("marcadores");
+let temporizador = null;
+window.FIGURAS.forEach(f => {
+  const m = el(cont, "a-marker", { type: "barcode", value: f.id, emitevents: "true", smooth: "true", smoothCount: "5", smoothTolerance: "0.01", smoothThreshold: "2" });
+  const raiz = grupo(m, { scale: "0.01 0.01 0.01" });
+  CONSTRUIR[f.id](raiz);
+  m.addEventListener("markerFound", () => {
+    clearTimeout(temporizador);
+    raiz.removeAttribute("animation__aparecer");
+    raiz.setAttribute("animation__aparecer", "property: scale; from: 0.01 0.01 0.01; to: 1 1 1; dur: 500; easing: easeOutBack");
+    mostrar(f.nombre, f.texto, f.ref);
+  });
+  m.addEventListener("markerLost", () => {
+    raiz.setAttribute("scale", "0.01 0.01 0.01");
+    temporizador = setTimeout(inicial, 900);
+  });
+});
+</script>
+</body>
+</html>
