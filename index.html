@@ -64,11 +64,12 @@
 <a-scene embedded
   vr-mode-ui="enabled: false"
   loading-screen="enabled: false"
-  renderer="logarithmicDepthBuffer: true; precision: medium; antialias: true;"
-  arjs="sourceType: webcam; detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false; sourceWidth: 1280; sourceHeight: 960; displayWidth: 1280; displayHeight: 960;">
+  renderer="precision: high; antialias: true;"
+  arjs="sourceType: webcam; detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false; cameraParametersUrl: camera_para.dat;">
 
-  <a-entity light="type: ambient; color: #FFF6E5; intensity: 0.75"></a-entity>
-  <a-entity light="type: directional; color: #FFFFFF; intensity: 0.7" position="1 3 2"></a-entity>
+  <a-entity light="type: ambient; color: #FFFFFF; intensity: 0.8"></a-entity>
+  <a-entity light="type: hemisphere; color: #FFF6E5; groundColor: #8A8FA8; intensity: 0.6"></a-entity>
+  <a-entity light="type: directional; color: #FFFFFF; intensity: 0.6" position="1 3 2"></a-entity>
 
   <!-- Los marcadores (1 a 13) se crean aquí desde figuras.js -->
   <a-entity id="marcadores"></a-entity>
@@ -78,9 +79,12 @@
 
 <script>
 // ---------- Utilidades para construir figuras con primitivas de A-Frame ----------
+// Modo de prueba: agrega ?plano=1 a la dirección para pintar las figuras sin luces ni sombras.
+const PLANO = new URLSearchParams(location.search).has("plano");
 function el(padre, tag, attrs) {
   const e = document.createElement(tag);
   for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (PLANO && tag !== "a-entity") e.setAttribute("shader", "flat");
   padre.appendChild(e);
   return e;
 }
@@ -232,6 +236,8 @@ const CONSTRUIR = {
 };
 
 // ---------- Crear marcadores y conectar eventos ----------
+// Tamaño de las figuras respecto al cuadro negro (1 = 100 %). Bájalo si no caben en pantalla.
+const ESCALA = 0.7;
 const params = new URLSearchParams(location.search);
 const panel = document.getElementById("panel");
 const pT = document.getElementById("p-titulo"), pX = document.getElementById("p-texto"), pR = document.getElementById("p-ref");
@@ -243,8 +249,8 @@ function mostrar(t, x, r, aviso) {
 }
 function inicial() {
   const f = porId[parseInt(params.get("fig"), 10)];
-  if (f) mostrar(`Busca la tarjeta de ${f.nombre}`, "Enfoca el cuadro negro de la tarjeta y mantén el celular estable.", "");
-  else mostrar("Apunta a una tarjeta", "Enfoca el cuadro negro de cualquier tarjeta del nacimiento y la figura aparecerá encima.", "");
+  if (f) mostrar(`Busca la tarjeta de ${f.nombre}`, "Enfoca el cuadro negro de la tarjeta. Para ver más, gira el celular en horizontal y aléjalo unos 30 cm.", "");
+  else mostrar("Apunta a una tarjeta", "Enfoca el cuadro negro de cualquier tarjeta. Para ver más, gira el celular en horizontal y aléjalo unos 30 cm.", "");
 }
 
 if (!window.isSecureContext) {
@@ -264,7 +270,7 @@ window.FIGURAS.forEach(f => {
   m.addEventListener("markerFound", () => {
     clearTimeout(temporizador);
     raiz.removeAttribute("animation__aparecer");
-    raiz.setAttribute("animation__aparecer", "property: scale; from: 0.01 0.01 0.01; to: 1 1 1; dur: 500; easing: easeOutBack");
+    raiz.setAttribute("animation__aparecer", `property: scale; from: 0.01 0.01 0.01; to: ${ESCALA} ${ESCALA} ${ESCALA}; dur: 500; easing: easeOutBack`);
     mostrar(f.nombre, f.texto, f.ref);
   });
   m.addEventListener("markerLost", () => {
